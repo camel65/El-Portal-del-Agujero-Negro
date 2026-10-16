@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agujero Negro Hipnótico & Tráfico Espacial</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #000;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            cursor: default;
+        }
+
+        /* Botón de Inicio B&W */
+        #btn-inicio {
+            padding: 18px 45px;
+            font-size: 1.6rem;
+            color: #000000;
+            background: #ffffff;
+            border: 2px solid #ffffff;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 25px rgba(255, 255, 255, 0.4);
+            z-index: 10;
+        }
+
+        #btn-inicio:hover {
+            background-color: #000000;
+            color: #ffffff;
+            border-color: #ffffff;
+            box-shadow: 0 0 35px rgba(255, 255, 255, 0.8);
+            transform: scale(1.08);
+        }
+
+        /* Controles flotantes */
+        .controles {
+            display: none;
+            position: fixed;
+            top: 25px;
+            right: 25px;
+            gap: 12px;
+            z-index: 20;
+        }
+
+        .btn-control {
+            padding: 10px 22px;
+            font-size: 0.95rem;
+            color: #ffffff;
+            background: rgba(0, 0, 0, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 30px;
+            backdrop-filter: blur(5px);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-control:hover {
+            background: #ffffff;
+            color: #000000;
+            transform: scale(1.05);
+        }
+
+        #btn-salir:hover {
+            background: #ffffff;
+            color: #000000;
+            border-color: #ffffff;
+        }
+
+        /* Contenedor del lienzo */
+        #canvas-container {
+            display: none;
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            justify-content: center;
+            align-items: center;
+            cursor: crosshair;
+        }
+
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Botón de Inicio -->
+    <button id="btn-inicio">Inicio</button>
+
+    <!-- Controles flotantes -->
+    <div class="controles" id="panel-controles">
+        <button class="btn-control" id="btn-audio">🔊 Sonido: ON</button>
+        <button class="btn-control" id="btn-salir">Salir</button>
+    </div>
+
+    <!-- Contenedor del lienzo -->
+    <div id="canvas-container">
+        <canvas id="espacioHipnoticoCanvas"></canvas>
+    </div>
+
+    <script>
+        const btnInicio = document.getElementById('btn-inicio');
+        const btnSalir = document.getElementById('btn-salir');
+        const btnAudio = document.getElementById('btn-audio');
+        const panelControles = document.getElementById('panel-controles');
+        const canvasContainer = document.getElementById('canvas-container');
+        const canvas = document.getElementById('espacioHipnoticoCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let animacionId = null;
+        let activo = false;
+        let estrellas = [];
+        let particulasDisco = [];
+        let cometas = [];
+        let objetosEspaciales = [];
+        let mouseX = -1000;
+        let mouseY = -1000;
+        let anguloNucleo = 0; // Rotación del agujero negro hipnótico
+
+        // Variables de Audio (Volumen Máximo)
+        let audioCtx = null;
+        let audioActivo = true;
+        let masterGain = null;
+        let compresor = null;
+        let filtro = null;
+        let tiempoBucleMusica = null;
+        let pasoRitmo = 0;
+
+        function ajustarCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        window.addEventListener('resize', ajustarCanvas);
+
+        // Control del ratón
+        window.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+            if (activo && Math.random() < 0.3) {
+                cometas.push({
+                    x: mouseX,
+                    y: mouseY,
+                    vx: (Math.random() - 0.5) * 5,
+                    vy: (Math.random() - 0.5) * 5,
+                    radio: Math.random() * 2 + 1
+                });
+            }
+        });
+
+        window.addEventListener('click', (e) => {
+            if (!activo) return;
+            for (let i = 0; i < 12; i++) {
+                cometas.push({
+                    x: e.clientX + (Math.random() - 0.5) * 30,
+                    y: e.clientY + (Math.random() - 0.5) * 30,
+                    vx: (Math.random() - 0.5) * 10,
+                    vy: (Math.random() - 0.5) * 10,
+                    radio: Math.random() * 2.5 + 1
+                });
+            }
+
+            objetosEspaciales.forEach(obj => {
+                let dist = Math.hypot(obj.x - e.clientX, obj.y - e.clientY);
+                if (dist < 150) {
+                    obj.vx += (Math.random() - 0.5) * 15;
+                    obj.vy += (Math.random() - 0.5) * 15;
+                }
+            });
+        });
+
+        // Clase Satélites y OVNIs
+        class ObjetoEspacial {
+            constructor(tipo) {
+                this.tipo = tipo;
+                this.reiniciar();
+            }
+
+            reiniciar() {
+                this.x = Math.random() < 0.5 ? -50 : canvas.width + 50;
+                this.y = Math.random() * canvas.height;
+                this.vx = (this.x < 0 ? 1 : -1) * (this.tipo === 'ovni' ? (Math.random() * 6 + 4) : (Math.random() * 1.5 + 1));
+                this.vy = (Math.random() - 0.5) * 2;
+                this.angulo = 0;
+                this.vRotacion = (Math.random() - 0.5) * 0.05;
+            }
+
+            actualizar() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.angulo += this.vRotacion;
+
+                let distMouse = Math.hypot(mouseX - this.x, mouseY - this.y);
+                if (distMouse < 120) {
+                    let anguloMouse = Math.atan2(this.y - mouseY, this.x - mouseX);
+                    this.x += Math.cos(anguloMouse) * 3;
+                    this.y += Math.sin(anguloMouse) * 3;
+                }
+
+                let centroX = canvas.width / 2;
+                let centroY = canvas.height / 2;
+                let distCentro = Math.hypot(centroX - this.x, centroY - this.y);
+                if (distCentro < 200 && distCentro > 45) {
+                    this.vx += ((centroX - this.x) / distCentro) * 0.15;
+                    this.vy += ((centroY - this.y) / distCentro) * 0.15;
+                } else if (distCentro <= 45) {
+                    this.reiniciar();
+                }
+
+                if (this.x < -100 || this.x > canvas.width + 100 || this.y < -100 || this.y > canvas.height + 100) {
+                    this.reiniciar();
+                }
+            }
+
+            dibujar() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.angulo);
+
+                ctx.strokeStyle = '#ffffff';
+                ctx.fillStyle = '#ffffff';
+                ctx.lineWidth = 2;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#ffffff';
+
+                if (this.tipo === 'satelite') {
+                    ctx.strokeRect(-10, -6, 20, 12);
+                    ctx.fillRect(-22, -10, 10, 20);
+                    ctx.fillRect(12, -10, 10, 20);
+                    ctx.beginPath();
+                    ctx.moveTo(0, -6);
+                    ctx.lineTo(0, -16);
+                    ctx.stroke();
+                } else {
+                    ctx.beginPath();
+                    ctx.ellipse(0, 0, 22, 8, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.beginPath();
+                    ctx.arc(0, -4, 8, Math.PI, 0, false);
+                    ctx.stroke();
+                    ctx.fillStyle = Math.random() < 0.5 ? '#ffffff' : '#000000';
+                    ctx.fillRect(-10, 4, 4, 3);
+                    ctx.fillRect(0, 4, 4, 3);
+                    ctx.fillRect(6, 4, 4, 3);
+                }
+
+                ctx.restore();
+            }
+        }
+
+        function inicializarEspacio() {
+            estrellas = [];
+            particulasDisco = [];
+            cometas = [];
+            objetosEspaciales = [];
+
+            for (let i = 0; i < 200; i++) {
+                estrellas.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    radio: Math.random() * 1.5,
+                    alfa: Math.random() * 0.8 + 0.2
+                });
+            }
+
+            for (let i = 0; i < 250; i++) {
+                let angulo = Math.random() * Math.PI * 2;
+                let distancia = Math.random() * 160 + 55;
+                particulasDisco.push({
+                    angulo: angulo,
+                    distancia: distancia,
+                    velocidad: (Math.random() * 0.035 + 0.01) * (Math.random() < 0.5 ? 1 : -1),
+                    radio: Math.random() * 1.8 + 0.5
+                });
+            }
+
+            for (let i = 0; i < 4; i++) {
+                objetosEspaciales.push(new ObjetoEspacial('satelite'));
+            }
+            for (let i = 0; i < 3; i++) {
+                objetosEspaciales.push(new ObjetoEspacial('ovni'));
+            }
+        }
+
+        // --- SISTEMA DE MÚSICA CÓSMICA (Volumen Máximo) ---
+        function reproducirMusicaCosmica() {
+            if (!audioActivo || !audioCtx || audioCtx.state !== 'running' || !activo) return;
+
+            const tiempoActual = audioCtx.currentTime;
+
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = 'sine';
+
+            const notasCosmicas = [49.00, 73.42, 98.00, 110.00, 146.83, 196.00];
+            let freq = notasCosmicas[pasoRitmo % notasCosmicas.length];
+
+            osc.frequency.setValueAtTime(freq, tiempoActual);
+
+            gain.gain.setValueAtTime(1.0, tiempoActual);
+            gain.gain.exponentialRampToValueAtTime(0.001, tiempoActual + 1.2);
+
+            osc.connect(gain);
+            gain.connect(filtro);
+            osc.start(tiempoActual);
+            osc.stop(tiempoActual + 1.3);
+
+            pasoRitmo++;
+            tiempoBucleMusica = setTimeout(reproducirMusicaCosmica, 750);
+        }
+
+        function iniciarMusica() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            } else if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+
+            masterGain = audioCtx.createGain();
+            masterGain.gain.setValueAtTime(audioActivo ? 1.0 : 0, audioCtx.currentTime);
+
+            compresor = audioCtx.createDynamicsCompressor();
+            compresor.threshold.setValueAtTime(-15, audioCtx.currentTime);
+            compresor.ratio.setValueAtTime(15, audioCtx.currentTime);
+
+            filtro = audioCtx.createBiquadFilter();
+            filtro.type = 'lowpass';
+            filtro.frequency.setValueAtTime(900, audioCtx.currentTime);
+
+            filtro.connect(compresor);
+            compresor.connect(masterGain);
+            masterGain.connect(audioCtx.destination);
+
+            pasoRitmo = 0;
+            reproducirMusicaCosmica();
+        }
+
+        function detenerMusica() {
+            if (tiempoBucleMusica) clearTimeout(tiempoBucleMusica);
+            tiempoBucleMusica = null;
+            if (masterGain && audioCtx) {
+                masterGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.2);
+            }
+        }
+
+        btnAudio.addEventListener('click', () => {
+            audioActivo = !audioActivo;
+            btnAudio.textContent = audioActivo ? "🔊 Sonido: ON" : "🔇 Sonido: OFF";
+            if (masterGain && audioCtx) {
+                masterGain.gain.setValueAtTime(audioActivo ? 1.0 : 0, audioCtx.currentTime);
+                if (audioActivo && activo && !tiempoBucleMusica) {
+                    reproducirMusicaCosmica();
+                }
+            }
+        });
+
+        // --- CONTROLES DE LA PÁGINA ---
+        btnInicio.addEventListener('click', () => {
+            btnInicio.style.display = 'none';
+            panelControles.style.display = 'flex';
+            canvasContainer.style.display = 'block';
+            
+            ajustarCanvas();
+            inicializarEspacio();
+            activo = true;
+
+            iniciarAnimacion();
+            iniciarMusica();
+        });
+
+        btnSalir.addEventListener('click', () => {
+            activo = false;
+            if (animacionId) cancelAnimationFrame(animacionId);
+            detenerMusica();
+
+            canvasContainer.style.display = 'none';
+            panelControles.style.display = 'none';
+            btnInicio.style.display = 'block';
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        });
+
+        // --- BUCLE DE ANIMACIÓN ---
+        function iniciarAnimacion() {
+            if (!activo) return;
+
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const centroX = canvas.width / 2;
+            const centroY = canvas.height / 2;
+
+            // 1. Estrellas de fondo atraídas por gravedad central
+            for (let i = 0; i < estrellas.length; i++) {
+                let s = estrellas[i];
+                let dx = centroX - s.x;
+                let dy = centroY - s.y;
+                let distCentro = Math.hypot(dx, dy);
+
+                if (distCentro < 350 && distCentro > 45) {
+                    s.x += (dx / distCentro) * 0.15;
+                    s.y += (dy / distCentro) * 0.15;
+                }
+
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.radio, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 255, 255, ${s.alfa})`;
+                ctx.fill();
+            }
+
+            // 2. Partículas del disco de acreción
+            for (let i = 0; i < particulasDisco.length; i++) {
+                let p = particulasDisco[i];
+                p.angulo += p.velocidad;
+
+                let px = centroX + Math.cos(p.angulo) * p.distancia;
+                let py = centroY + Math.sin(p.angulo) * (p.distancia * 0.4);
+
+                ctx.beginPath();
+                ctx.arc(px, py, p.radio, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.shadowBlur = 6;
+                ctx.shadowColor = '#ffffff';
+                ctx.fill();
+            }
+            ctx.shadowBlur = 0;
+
+            // 3. Satélites y OVNIs
+            for (let i = 0; i < objetosEspaciales.length; i++) {
+                objetosEspaciales[i].actualizar();
+                objetosEspaciales[i].dibujar();
+            }
+
+            // 4. Cometas interactivos
+            for (let i = cometas.length - 1; i >= 0; i--) {
+                let c = cometas[i];
+                let dx = centroX - c.x;
+                let dy = centroY - c.y;
+                let distCentro = Math.hypot(dx, dy);
+
+                if (distCentro < 40) {
+                    cometas.splice(i, 1);
+                    continue;
+                }
+
+                c.vx += (dx / distCentro) * 0.35;
+                c.vy += (dy / distCentro) * 0.35;
+                c.x += c.vx;
+                c.y += c.vy;
+
+                c.vx *= 0.98;
+                c.vy *= 0.98;
+
+                ctx.beginPath();
+                ctx.arc(c.x, c.y, c.radio, 0, Math.PI * 2);
+                ctx.fillStyle = '#ffffff';
+                ctx.fill();
+            }
+
+            // 5. NÚCLEO DEL AGUJERO NEGRO GIRATORIO CON EFECTO HIPNÓTICO
+            anguloNucleo += 0.04; // Velocidad de giro del agujero negro
+
+            ctx.save();
+            ctx.translate(centroX, centroY);
+
+            // Círculo base recortado (horizonte de sucesos)
+            ctx.beginPath();
+            ctx.arc(0, 0, 42, 0, Math.PI * 2);
+            ctx.fillStyle = '#000000';
+            ctx.shadowBlur = 25;
+            ctx.shadowColor = '#ffffff';
+            ctx.fill();
+            ctx.clip(); // Todo lo que dibujemos dentro se queda en el círculo del agujero negro
+
+            // Efecto hipnótico rotatorio dentro del agujero
+            ctx.rotate(anguloNucleo);
+            let lineasHipnoticas = 12;
+            for (let i = 0; i < lineasHipnoticas; i++) {
+                let ang = (i * Math.PI * 2) / lineasHipnoticas;
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.lineTo(Math.cos(ang) * 60, Math.sin(ang) * 60);
+                ctx.strokeStyle = (i % 2 === 0) ? '#ffffff' : '#444444';
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            }
+
+            // Espirales concéntricas hipnóticas
+            for (let r = 10; r < 50; r += 10) {
+                ctx.beginPath();
+                ctx.arc(0, 0, r, 0, Math.PI * 2);
+                ctx.strokeStyle = (r % 20 === 0) ? '#ffffff' : '#777777';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([6, 6]);
+                ctx.stroke();
+                ctx.setLineDash([]); // Limpiar guiones
+            }
+
+            ctx.restore();
+
+            // Anillo exterior brillante del agujero negro
+            ctx.beginPath();
+            ctx.arc(centroX, centroY, 42, 0, Math.PI * 2);
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            animacionId = requestAnimationFrame(iniciarAnimacion);
+        }
+    </script>
+</body>
+</html>
